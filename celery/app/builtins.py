@@ -169,9 +169,19 @@ def add_chain_task(app):
         def apply_async(self, args=(), kwargs={}, **options):
             if self.app.conf.CELERY_ALWAYS_EAGER:
                 return self.apply(args, kwargs, **options)
-            tasks = [maybe_subtask(task).clone(task_id=uuid(), **kwargs)
-                        for task in kwargs["tasks"]]
+            options.pop("publisher", None)
+            last_task_opts = {
+                "taskset_id": options.pop("taskset_id", None),
+                "chord": options.pop("chord", None),
+            }
+            last_task_opts = dict((k, v) for k, v in last_task_opts.items() if v)
+            tasks = [maybe_subtask(t).clone(
+                        task_id=options.pop("task_id", uuid()),
+                        **options
+                    )
+                    for t in kwargs["tasks"]]
             reduce(lambda a, b: a.link(b), tasks)
+            tasks[-1].set(**last_task_opts)
             tasks[0].apply_async()
             results = [task.type.AsyncResult(task.options["task_id"])
                             for task in tasks]
